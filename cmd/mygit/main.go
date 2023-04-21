@@ -2,6 +2,7 @@ package main
 
 import (
 	"compress/zlib"
+	"crypto/sha1"
 	"fmt"
 	"io"
 	"os"
@@ -64,6 +65,48 @@ func main() {
 		} else if objectType == "-t" {
 			fmt.Print(header)
 		}
+
+	case "hash-object":
+		if len(os.Args) != 4 {
+			fmt.Fprintf(os.Stderr, "usage: mygit hash-object <file>\n")
+			os.Exit(1)
+		}
+
+		fileName := os.Args[3]
+
+		f, err := os.Open(fileName)
+		check(err)
+		defer f.Close()
+
+		content, err := io.ReadAll(f)
+		check(err)
+
+		contentString := fmt.Sprintf("blob %d\u0000%s", len(content), content)
+
+		// create sha1 hash
+		sha1Hash := fmt.Sprintf("%x", sha1.Sum([]byte(contentString)))
+		// print sha1 hash to stdout
+		fmt.Print(sha1Hash)
+
+		folder := sha1Hash[:2]
+		file := sha1Hash[2:]
+		objectFile := fmt.Sprintf(".git/objects/%s/%s", folder, file)
+
+		// create objectFile in file system
+		check(
+			os.MkdirAll(
+				fmt.Sprintf(".git/objects/%s", folder),
+				os.ModePerm))
+		wF, err := os.Create(objectFile)
+		check(err)
+		defer wF.Close()
+
+		// write content to objectFile
+		w := zlib.NewWriter(wF)
+		defer w.Close()
+
+		_, err = w.Write([]byte(contentString))
+		check(err)
 
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command %s\n", command)
