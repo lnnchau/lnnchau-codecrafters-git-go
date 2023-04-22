@@ -82,6 +82,7 @@ func main() {
 
 		contentParts := storeParts[1 : len(storeParts)-1] // the last one would contains <sha-1 hash> only
 
+		displayContent := ""
 		for i, contentPart := range contentParts {
 			// the first item isn't appended by the sha-1
 			var sizeWithPath string
@@ -94,8 +95,10 @@ func main() {
 			sizeWithPathParts := strings.Split(sizeWithPath, " ")
 			path := sizeWithPathParts[1]
 
-			defer fmt.Println(path) // print once complete successfully
+			displayContent += fmt.Sprintln(path)
 		}
+
+		fmt.Print(displayContent)
 	case "hash-object":
 		if len(os.Args) != 4 {
 			fmt.Fprintf(os.Stderr, "usage: mygit hash-object -w <file>\n")
