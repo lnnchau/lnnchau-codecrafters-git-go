@@ -6,7 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+)
+
+const (
+	SHA_1_SIZE_IN_BYTES = 20
 )
 
 // Usage: your_git.sh <command> <arg1> <arg2> ...
@@ -40,21 +45,7 @@ func main() {
 		objectType := os.Args[2]
 		objectHash := os.Args[3]
 
-		folder := objectHash[:2]
-		fileName := objectHash[2:]
-
-		f, err := os.Open(fmt.Sprintf(".git/objects/%s/%s", folder, fileName))
-		check(err)
-		defer f.Close()
-
-		r, err := zlib.NewReader(f)
-		check(err)
-		defer r.Close()
-
-		bytesContents, err := io.ReadAll(r)
-		check(err)
-
-		store := string(bytesContents)
+		store := getStoreObject(objectHash)
 		storeParts := strings.Split(store, "\u0000")
 
 		header := storeParts[0]
@@ -66,9 +57,48 @@ func main() {
 			fmt.Print(header)
 		}
 
+	case "ls-tree":
+		if len(os.Args) != 4 {
+			fmt.Fprintf(os.Stderr, "usage: mygit ls-tree --name-only <hash>\n")
+			os.Exit(1)
+		}
+
+		treeHash := os.Args[3]
+		store := getStoreObject(treeHash)
+
+		// the structure of the contents stored in the tree object is as follows:
+		// tree <size>\u0000<content>
+		// where <content> is a no-space concatenation of: <size> <name>\u0000<sha-1 hash>
+		// for example: 100644 README.md\u0000<sha-1 hash>100644 README.md\u0000<sha-1 hash>
+
+		// the following code splits the store into its parts
+		storeParts := strings.Split(store, "\u0000")
+
+		header, _ := parseHeader(storeParts[0])
+		if header != "tree" {
+			fmt.Fprintf(os.Stderr, "Error: %s is not a tree object\n", treeHash)
+			os.Exit(1)
+		}
+
+		contentParts := storeParts[1 : len(storeParts)-1] // the last one would contains <sha-1 hash> only
+
+		for i, contentPart := range contentParts {
+			// the first item isn't appended by the sha-1
+			var sizeWithPath string
+			if i == 0 {
+				sizeWithPath = contentPart
+			} else {
+				sizeWithPath = contentPart[SHA_1_SIZE_IN_BYTES:]
+			}
+
+			sizeWithPathParts := strings.Split(sizeWithPath, " ")
+			path := sizeWithPathParts[1]
+
+			defer fmt.Println(path) // print once complete successfully
+		}
 	case "hash-object":
 		if len(os.Args) != 4 {
-			fmt.Fprintf(os.Stderr, "usage: mygit hash-object <file>\n")
+			fmt.Fprintf(os.Stderr, "usage: mygit hash-object -w <file>\n")
 			os.Exit(1)
 		}
 
@@ -85,18 +115,12 @@ func main() {
 
 		// create sha1 hash
 		sha1Hash := fmt.Sprintf("%x", sha1.Sum([]byte(contentString)))
-		// print sha1 hash to stdout
-		fmt.Print(sha1Hash)
+		defer fmt.Print(sha1Hash) // print once complete successfully
 
-		folder := sha1Hash[:2]
-		file := sha1Hash[2:]
-		objectFile := fmt.Sprintf(".git/objects/%s/%s", folder, file)
+		objectFile := getObjectFn(sha1Hash)
 
 		// create objectFile in file system
-		check(
-			os.MkdirAll(
-				fmt.Sprintf(".git/objects/%s", folder),
-				os.ModePerm))
+		check(os.MkdirAll(filepath.Dir(objectFile), os.ModePerm))
 		wF, err := os.Create(objectFile)
 		check(err)
 		defer wF.Close()
@@ -111,11 +135,5 @@ func main() {
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command %s\n", command)
 		os.Exit(1)
-	}
-}
-
-func check(e error) {
-	if e != nil {
-		panic(e)
 	}
 }
