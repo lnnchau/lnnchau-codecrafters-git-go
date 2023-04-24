@@ -135,6 +135,12 @@ func main() {
 		_, err = w.Write([]byte(contentString))
 		check(err)
 
+	case "write-tree":
+		wd, _ := os.Getwd()
+		sha1Hash, err := WriteTree(wd)
+		check(err)
+
+		fmt.Println(sha1Hash)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command %s\n", command)
 		os.Exit(1)
