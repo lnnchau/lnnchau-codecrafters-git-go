@@ -1,12 +1,8 @@
 package main
 
 import (
-	"compress/zlib"
-	"crypto/sha1"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -107,33 +103,9 @@ func main() {
 
 		fileName := os.Args[3]
 
-		f, err := os.Open(fileName)
+		sha1Hash, _, err := WriteBlob(fileName)
 		check(err)
-		defer f.Close()
-
-		content, err := io.ReadAll(f)
-		check(err)
-
-		contentString := fmt.Sprintf("blob %d\u0000%s", len(content), content)
-
-		// create sha1 hash
-		sha1Hash := fmt.Sprintf("%x", sha1.Sum([]byte(contentString)))
-		defer fmt.Print(sha1Hash) // print once complete successfully
-
-		objectFile := getObjectFn(sha1Hash)
-
-		// create objectFile in file system
-		check(os.MkdirAll(filepath.Dir(objectFile), os.ModePerm))
-		wF, err := os.Create(objectFile)
-		check(err)
-		defer wF.Close()
-
-		// write content to objectFile
-		w := zlib.NewWriter(wF)
-		defer w.Close()
-
-		_, err = w.Write([]byte(contentString))
-		check(err)
+		fmt.Println(sha1Hash)
 
 	case "write-tree":
 		wd, _ := os.Getwd()
