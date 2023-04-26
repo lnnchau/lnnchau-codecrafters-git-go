@@ -137,7 +137,7 @@ func main() {
 
 	case "write-tree":
 		wd, _ := os.Getwd()
-		sha1Hash, err := WriteTree(wd)
+		sha1Hash, _, err := WriteTree(wd)
 		check(err)
 
 		fmt.Println(sha1Hash)

@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -45,7 +46,7 @@ func parseHeader(header string) (string, int) {
 	return objectType, objectSize
 }
 
-func WriteTree(folder string) (string, error) {
+func WriteTree(folder string) (string, [20]byte, error) {
 	sha1Hash := ""
 	contentString := ""
 
@@ -57,21 +58,32 @@ func WriteTree(folder string) (string, error) {
 			continue
 		}
 
-		if file.IsDir() {
-			sha1Hash, err = WriteTree(filepath.Join(folder, file.Name()))
-			contentString += fmt.Sprintf("40000 tree %s %s\n", sha1Hash, file.Name())
-		} else {
-			sha1Hash, err = WriteBlob(filepath.Join(folder, file.Name()))
-			contentString += fmt.Sprintf("100644 blob %s %s\n", sha1Hash, file.Name())
-		}
+		hash, fileMode, err := writeObject(folder, file)
+		check(err)
+		contentString += fmt.Sprintf("%s %v\u0000%s", fileMode, file.Name(), hash)
 	}
 
-	check(err)
-	sha1Hash, err = writeHashFile(fmt.Sprintf("tree %d\u0000%s", len(contentString), contentString))
-	return sha1Hash, err
+	sha1Hash, sha1HashInBytes, err := writeHashFile(fmt.Sprintf("tree %d\u0000%s", len([]byte(contentString)), contentString))
+	return sha1Hash, sha1HashInBytes, err
 }
 
-func WriteBlob(path string) (string, error) {
+func writeObject(folder string, file fs.FileInfo) ([20]byte, string, error) {
+	var hash [20]byte
+	var fileMode string
+	var err error
+
+	if file.IsDir() {
+		_, hash, err = WriteTree(filepath.Join(folder, file.Name()))
+		fileMode = "40000"
+	} else {
+		_, hash, err = WriteBlob(filepath.Join(folder, file.Name()))
+		fileMode = "100644"
+	}
+
+	return hash, fileMode, err
+}
+
+func WriteBlob(path string) (string, [20]byte, error) {
 	f, err := os.Open(path)
 	check(err)
 	defer f.Close()
@@ -84,20 +96,21 @@ func WriteBlob(path string) (string, error) {
 	// create sha1 hash
 	// create objectFile in file system
 	// write content to objectFile
-	sha1Hash, err := writeHashFile(contentString)
+	sha1Hash, sha1HashInBytes, err := writeHashFile(contentString)
 
-	return sha1Hash, err
+	return sha1Hash, sha1HashInBytes, err
 }
 
-func writeHashFile(contentString string) (string, error) {
-	sha1Hash := fmt.Sprintf("%x", sha1.Sum([]byte(contentString)))
+func writeHashFile(contentString string) (string, [20]byte, error) {
+	sha1HashInBytes := sha1.Sum([]byte(contentString))
+	sha1Hash := fmt.Sprintf("%x", sha1HashInBytes)
 	objectFile := getObjectFn(sha1Hash)
 
 	// check if objectFile exists
 	// if exists, return sha1Hash
 	_, err := os.Stat(objectFile)
 	if err == nil {
-		return sha1Hash, nil
+		return sha1Hash, sha1HashInBytes, nil
 	}
 
 	check(os.MkdirAll(filepath.Dir(objectFile), os.ModePerm))
@@ -109,7 +122,7 @@ func writeHashFile(contentString string) (string, error) {
 	defer w.Close()
 
 	_, err = w.Write([]byte(contentString))
-	return sha1Hash, err
+	return sha1Hash, sha1HashInBytes, err
 }
 
 func check(e error) {
