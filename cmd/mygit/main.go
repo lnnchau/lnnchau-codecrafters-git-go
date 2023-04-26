@@ -103,13 +103,17 @@ func main() {
 
 		fileName := os.Args[3]
 
-		sha1Hash, _, err := WriteBlob(fileName)
+		fileNameBlob := NewBlob(fileName)
+
+		sha1Hash, _, err := fileNameBlob.WriteToFile()
 		check(err)
 		fmt.Println(sha1Hash)
 
 	case "write-tree":
 		wd, _ := os.Getwd()
-		sha1Hash, _, err := WriteTree(wd)
+
+		wdTree := NewTree(wd)
+		sha1Hash, _, err := wdTree.WriteToFile()
 		check(err)
 
 		fmt.Println(sha1Hash)

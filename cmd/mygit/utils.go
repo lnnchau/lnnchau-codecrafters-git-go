@@ -5,8 +5,6 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
-	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -46,61 +44,6 @@ func parseHeader(header string) (string, int) {
 	return objectType, objectSize
 }
 
-func WriteTree(folder string) (string, [20]byte, error) {
-	sha1Hash := ""
-	contentString := ""
-
-	files, err := ioutil.ReadDir(folder)
-	check(err)
-
-	for _, file := range files {
-		if file.Name() == ".git" {
-			continue
-		}
-
-		hash, fileMode, err := writeObject(folder, file)
-		check(err)
-		contentString += fmt.Sprintf("%s %v\u0000%s", fileMode, file.Name(), hash)
-	}
-
-	sha1Hash, sha1HashInBytes, err := writeHashFile(fmt.Sprintf("tree %d\u0000%s", len([]byte(contentString)), contentString))
-	return sha1Hash, sha1HashInBytes, err
-}
-
-func writeObject(folder string, file fs.FileInfo) ([20]byte, string, error) {
-	var hash [20]byte
-	var fileMode string
-	var err error
-
-	if file.IsDir() {
-		_, hash, err = WriteTree(filepath.Join(folder, file.Name()))
-		fileMode = "40000"
-	} else {
-		_, hash, err = WriteBlob(filepath.Join(folder, file.Name()))
-		fileMode = "100644"
-	}
-
-	return hash, fileMode, err
-}
-
-func WriteBlob(path string) (string, [20]byte, error) {
-	f, err := os.Open(path)
-	check(err)
-	defer f.Close()
-
-	content, err := io.ReadAll(f)
-	check(err)
-
-	contentString := fmt.Sprintf("blob %d\u0000%s", len(content), content)
-
-	// create sha1 hash
-	// create objectFile in file system
-	// write content to objectFile
-	sha1Hash, sha1HashInBytes, err := writeHashFile(contentString)
-
-	return sha1Hash, sha1HashInBytes, err
-}
-
 func writeHashFile(contentString string) (string, [20]byte, error) {
 	sha1HashInBytes := sha1.Sum([]byte(contentString))
 	sha1Hash := fmt.Sprintf("%x", sha1HashInBytes)
@@ -123,6 +66,10 @@ func writeHashFile(contentString string) (string, [20]byte, error) {
 
 	_, err = w.Write([]byte(contentString))
 	return sha1Hash, sha1HashInBytes, err
+}
+
+func GetContentString(objectType string, content string) string {
+	return fmt.Sprintf("%s %d\u0000%s", objectType, len(content), content)
 }
 
 func check(e error) {
